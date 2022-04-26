@@ -36,7 +36,7 @@ namespace CognitiveServices
 
     class Program
     {
-        private const string CogServicesSecret = "ec9917d1f873431caf2fc6c5dbd3b57d";
+        private const string CogServicesSecret = "";
         private const string Endpoint = "https://atividademlcarol.cognitiveservices.azure.com/";
 
         private static readonly string TextFile = "TextFile.txt";
