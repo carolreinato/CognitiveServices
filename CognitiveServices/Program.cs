@@ -4,14 +4,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Azure.CognitiveServices.Language.TextAnalytics;
-using Microsoft.Azure.CognitiveServices.Language.TextAnalytics.Models;
-using Microsoft.Azure.CognitiveServices.Vision.ComputerVision;
-using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
 using Microsoft.Rest;
 using Microsoft.Azure.CognitiveServices.ContentModerator;
 using System.IO;
 using System.Text;
-using Newtonsoft.Json;
+using CognitiveServices.Models;
 
 namespace CognitiveServices
 {
@@ -36,84 +33,21 @@ namespace CognitiveServices
 
     class Program
     {
-        private const string CogServicesSecret = "";
+        private const string CogServicesSecret = "<Secret Key>";
         private const string Endpoint = "https://atividademlcarol.cognitiveservices.azure.com/";
 
         private static readonly string TextFile = "TextFile.txt";
-        private static string TextOutputFile = "TextModerationOutput.txt";
 
         static void Main()
         {
-            Console.WriteLine("Exemplos cognitivos");
-            DetectLanguage().Wait();
-            DetectSentiment().Wait();
-            ModerateText(TextFile, TextOutputFile);
-        }
-
-        public static async Task DetectLanguage()
-        {
-            var credentials = new ApiKeyServiceClientCreds(CogServicesSecret);
-            var client = new TextAnalyticsClient(credentials)
-            {
-                Endpoint = Endpoint
-            };
-
-            var inputData = new LanguageBatchInput(
-                new List<LanguageInput>
-                {
-                    new LanguageInput("1","J'aime programmer et développer des systèmes."),
-                    new LanguageInput("2","I love to program and develop systems."),
-                    new LanguageInput("3","Me encanta programar y desarrollar sistemas.")
-                });
-
-            var results = await client.DetectLanguageBatchAsync(inputData);
-
-            Console.WriteLine("**** Detecção de idiomas ****");
-            foreach (var item in results.Documents)
-            {
-                Console.WriteLine($"IdDocumento: {item.Id}, Idioma: {item.DetectedLanguages[0].Name}");
-            }
+            Console.WriteLine("************* Exemplos de serviços cognitivos *************");
             Console.WriteLine();
+
+            var content = ModerateText(TextFile).Result;
+            DetectSentiment(content.Language, content.Text).Wait();
         }
 
-        public static async Task DetectSentiment()
-        {
-            var credentials = new ApiKeyServiceClientCreds(CogServicesSecret);
-            var sentimentMeaning = "";
-
-            var client = new TextAnalyticsClient(credentials)
-            {
-                Endpoint = Endpoint
-            };
-
-            var inputData = new MultiLanguageBatchInput(
-                new List<MultiLanguageInput>
-                {
-                    new MultiLanguageInput("1", "I hate it here.", "en"),
-                    new MultiLanguageInput("2", "What a wonderful picture.", "en"),
-                    new MultiLanguageInput("3", "I'm so confused.", "en")
-                });
-
-            var results = await client.SentimentBatchAsync(inputData);
-
-            Console.WriteLine("**** Análise de sentimentos ****");
-            foreach (var item in results.Documents)
-            {
-                if (item.Score > 0.5)
-                {
-                    sentimentMeaning = "Positivo";
-                }
-                else
-                {
-                    sentimentMeaning = "Negativo";
-                }
-
-                Console.WriteLine($"IdDocumento: {item.Id} é {sentimentMeaning}, Score de sentimento: {item.Score}");
-            }
-            Console.WriteLine();
-        }
-
-        public static void ModerateText(string inputFile, string outputFile)
+        public static async Task<TextModerationModel> ModerateText(string inputFile)
         {
             var credentials = new ApiKeyServiceClientCreds(CogServicesSecret);
 
@@ -128,24 +62,46 @@ namespace CognitiveServices
                 Endpoint = Endpoint
             };
 
-            //using (StreamWriter outputWriter = new StreamWriter(outputFile, false))
-            //{
-            using (client)
+            var screenResult = await client.TextModeration.ScreenTextAsync("text/plain", stream, null, true, true, null, true);
+            Console.WriteLine("Analisando...");
+            if (screenResult.PII.Email.Count > 0 || screenResult.PII.Address.Count > 0 || screenResult.PII.Phone.Count > 0)
             {
-                // Screen the input text: check for profanity, classify the text into three categories,
-                // do autocorrect text, and check for personally identifying information (PII)
-                //outputWriter.WriteLine("Autocorrect typos, check for matching terms, PII, and classify.");
-
-                // Moderate the text
-                var screenResult = client.TextModeration.ScreenText("text/plain", stream, "eng", true, true, null, true);
-                //outputWriter.WriteLine(JsonConvert.SerializeObject(screenResult, Formatting.Indented));
-                Console.WriteLine($"O texto auto corrigido é: {screenResult.AutoCorrectedText}");
+                Console.WriteLine();
+                Console.WriteLine("Seu texto contém informações pessoais! Cuidado ao compartilhá-las!");
+                Console.WriteLine();
+            }
+            else
+            {
+                Console.WriteLine();
+                Console.WriteLine("Parabéns por não compartilhar informações pessoais!");
+                Console.WriteLine();
             }
 
-            //outputWriter.Flush();
-            //outputWriter.Close();
-            //}
+            var result = new TextModerationModel
+            {
+                Language = screenResult.Language.Remove(screenResult.Language.Length-1),
+                Text = screenResult.AutoCorrectedText
+            };
+            return result;
+        }
 
+        public static async Task DetectSentiment(string language, string text)
+        {
+            var credentials = new ApiKeyServiceClientCreds(CogServicesSecret);
+            var sentimentMeaning = "";
+
+            var client = new TextAnalyticsClient(credentials)
+            {
+                Endpoint = Endpoint
+            };
+
+            var results = await client.SentimentAsync(text, language);
+
+            Console.WriteLine("**** Análise de sentimentos ****");
+
+            sentimentMeaning = results.Score > 0.5 ? "Positivo" : "Negativo";
+
+            Console.WriteLine($"O sentimento do texto é {sentimentMeaning}, Score de sentimento: {results.Score}");
             Console.WriteLine();
         }
     }
